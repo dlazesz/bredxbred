@@ -12,11 +12,12 @@ usage() {
 showhelp() {
   echo "Usage: `basename $1`: [-m host1 [host2...]] [-c column] [-r reduce] [-i input] [-o output]"
   echo   "bashreduce.  Map an input file to many hosts, sort/reduce, merge"
+  echo   "  -j: job index, default = 0"
   echo   "  -m: hosts to use, can repeat hosts for multiple cores"
   echo   "      default hosts from /etc/br.hosts"
   echo   "  -c: column to partition, default = 1 (1-based)"
-  echo   "  -r: reduce function, default = identity"
   echo   "  -i: input file, default = stdin"
+  echo   "  -r: reduce function, default = identity"
   echo   "  -o: output file, default = stdout"
   echo   "  -t: tmp dir to use, default = /tmp"
   echo   "  -S: memory to use for sort, default = 256M"
@@ -28,13 +29,15 @@ hosts=
 mapcolumn=1
 reduce=
 input=
+job_idx=0
 output=
 tmp_dir=/tmp
 sort_mem=256M
 
-while getopts "m:c:r:i:o:t:S:h" name; do
+while getopts "m:c:r:i:j:o:t:S:h" name; do
   case $name in
     m)  hosts=$OPTARG;;
+    j)  job_idx=$OPTARG;;
     c)  mapcolumn=$OPTARG;;
     r)  reduce=$OPTARG;;
     i)  input=$OPTARG;;
@@ -56,7 +59,7 @@ if [ -z "$hosts" ]; then
 fi
 
 # if we have a reduce, add the pipe explicitly
-[ -n "$reduce" ] && reduce="| $reduce 2>/dev/null"
+[ -n "$reduce" ] && reduce="| $reduce 2>>/tmp/brerr.log"
 
 # okay let's get started!  first we need a name for our job
 jobid="`uuidgen`"
@@ -65,8 +68,8 @@ nodepath="$tmp_dir/br_node_$jobid"
 mkdir -p $jobpath/{in,out}
 
 # now, for each host, set up in and out fifos (and a netcat for each), and ssh to each host to set up workers listening on netcat
-
-port_in=8192
+num_hosts=$(($(echo "$hosts" | wc -w)))
+port_in=$((8192 + $num_hosts * $job_idx * 2))
 port_out=$(($port_in + 1))
 host_idx=0
 out_files=
