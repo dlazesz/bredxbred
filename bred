@@ -48,13 +48,13 @@ showhelp() {
   echo   "      default hosts from ~/.br.hosts or /etc/br.hosts"
   echo   "  -M: mode ('map', 'reduce', 'compat'), default = 'compat'"
   echo   "  -I: interpreter. ignored if 'compat' mode is used, default = 'bash'"
-  echo   "  -c: column to partition, default = 1 (1-based)"
+  echo   "  -c: column to partition, default = $mapcolumn (1-based)"
   echo   "  -i: input file, default = stdin"
   echo   "  -o: output file, default = stdout"
   echo   "  -e: error file, default = stderr"
   echo   "  -r: userfunc function, default = identity"
   echo   "  -f: read userfunc from a file (yes/no), default = no"
-  echo   "  -s: column to 's'ort(s) on reduce (and following merge). , default is equal to -c "
+  echo   "  -s: key to 's'ort(s) on reduce (and following merge). , default is equal to -c (e.g. $mapcolumn,$mapcolumn) "
   echo   "  -T: option given to sor'T'(s) on reduce (and following merge), default is nothing"
   echo   "  -O: perform sort on output, ignored in 'compat' mode., default = yes"
   echo   "  -h: this help message"
@@ -122,7 +122,7 @@ bred_parseopt() {
   input=
   output=
   error=
-  sort_column=
+  sort_key=
   sort_on_out="yes"
   sort_opt=
   hosts_fromopt=
@@ -139,7 +139,7 @@ bred_parseopt() {
       i)  input=$OPTARG;;
       o)  output=$OPTARG;;
       e)  error=$OPTARG;;
-      s)  sort_column=$OPTARG;;
+      s)  sort_key=$OPTARG;;
       O)  sort_on_out=$OPTARG;;
       T)  sort_opt=$OPTARG;;
       h)  showhelp $0;;
@@ -151,7 +151,7 @@ bred_parseopt() {
     userfunc=`cat "${userfunc}"`
     debug "bred_parseopt: after--->${userfunc}:"
   fi
-  sort_column=${sort_column:-$mapcolumn}
+  sort_key=${sort_key:-$mapcolumn,$mapcolumn}
   case "$mode" in
     compat|map|reduce)
       ;;
@@ -197,7 +197,8 @@ bred_compose_task() {
   sorter="2>$sorter_errolog"
   if [ "$sort_on_out" == "yes" ] ; then
     local _sortmem=$(bred_get_sortmem "$host_idx")
-    sorter="| LC_ALL='$LC_ALL' sort -S${_sortmem} -T$sorttmpdir -k$sort_column,$sort_column $sort_opt  2>$sorter_errolog"
+    sorter="| LC_ALL='$LC_ALL' sort -S${_sortmem} -T${sorttmpdir} -k${sort_key} ${sort_opt}  2>${sorter_errolog}"
+	echo $sorter >&2
   fi
   
   local envvars=
@@ -481,7 +482,7 @@ bred_executejob() {
 
   debug "INFO: merge is started"
   if [ ${sort_on_out} == "yes" ] ; then
-    eval "sort -k${sort_column},${sort_column} -m ${in_files} ${sort_opt} ${output:+| pv >$output}"
+    eval "sort -k${sort_key} -m ${in_files} ${sort_opt} ${output:+| pv >$output}"
   else
     eval "cat ${in_files} ${output:+| pv >$output}"
   fi
